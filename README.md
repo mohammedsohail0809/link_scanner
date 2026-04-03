@@ -38,7 +38,7 @@ By identifying the registrar and creation date, we help you spot a legitimate si
 ### 2. Installation
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/link-scanner.git
+   git clone https://github.com/mohammedsohail0809/link-scanner.git
    cd link-scanner
    ```
 2. Install dependencies:
