@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Link Scanner</title>
+  <style>
+    :root {
+      --bg-color: #0f1117;
+      --card-bg: #1a1d27;
+      --border-color: #2d3148;
+      --text-main: #e2e8f0;
+      --text-dim: #64748b;
+      --accent: #6366f1;
+
+      /* Result Gradients */
+      --safe-gradient: linear-gradient(135deg, #0d2b1f 0%, #16a34a33 100%);
+      --suspicious-gradient: linear-gradient(135deg, #2b1f0d 0%, #d9770633 100%);
+      --malicious-gradient: linear-gradient(135deg, #2b0d0d 0%, #dc262633 100%);
+      --neutral-gradient: linear-gradient(135deg, #1a1d27 0%, #2d314833 100%);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg-color);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      transition: background 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .container { width: 100%; max-width: 900px; }
+
+    .search-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: 32px;
+      margin-bottom: 24px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+      text-align: center;
+    }
+
+    h1 { font-size: 28px; margin-bottom: 8px; letter-spacing: -0.02em; }
+    p.sub { color: var(--text-dim); margin-bottom: 24px; font-size: 15px; }
+
+    .input-group { display: flex; gap: 12px; }
+    input {
+      flex: 1;
+      padding: 14px 20px;
+      border-radius: 12px;
+      border: 1px solid var(--border-color);
+      background: #0f1117;
+      color: white;
+      font-size: 16px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input:focus { border-color: var(--accent); }
+
+    button {
+      padding: 0 28px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.1s, background 0.2s;
+    }
+    button:hover { background: #4f52d4; }
+    button:active { transform: scale(0.98); }
+    button:disabled { background: var(--border-color); color: var(--text-dim); cursor: not-allowed; }
+
+    .loading { margin-top: 16px; color: var(--text-dim); display: none; font-size: 14px; }
+
+    /* Results Grid */
+    .results-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+      gap: 20px;
+      margin-top: 24px;
+      display: none;
+    }
+
+    .result-box {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      transition: all 0.5s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .box-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .box-title { font-size: 13px; font-weight: 700; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.05em; }
+    .box-status { font-size: 14px; font-weight: 600; padding: 4px 10px; border-radius: 8px; }
+
+    .box-content { flex: 1; }
+    .data-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 14px; }
+    .data-row:last-child { border-bottom: none; }
+    .data-label { color: var(--text-dim); }
+    .data-value { font-weight: 500; }
+
+    .flags-list { list-style: none; margin-top: 12px; }
+    .flags-list li { font-size: 13px; padding: 4px 0; color: #cbd5e1; display: flex; gap: 8px; }
+    .flags-list li::before { content: '•'; color: var(--accent); }
+
+    /* Score Colors */
+    .status-safe       { color: #4ade80; background: #14532d44; }
+    .status-suspicious { color: #fbbf24; background: #451a0344; }
+    .status-malicious  { color: #f87171; background: #450a0a44; }
+
+    .bg-safe       { background-image: var(--safe-gradient) !important; border-color: #16a34a66 !important; }
+    .bg-suspicious { background-image: var(--suspicious-gradient) !important; border-color: #d9770666 !important; }
+    .bg-malicious  { background-image: var(--malicious-gradient) !important; border-color: #dc262666 !important; }
+
+    /* Final Verdict Banner */
+    .verdict-banner {
+      width: 100%;
+      padding: 20px;
+      border-radius: 16px;
+      margin-bottom: 24px;
+      text-align: center;
+      display: none;
+      animation: slideDown 0.5s ease;
+    }
+    @keyframes slideDown { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+    .verdict-text { font-size: 24px; font-weight: 800; }
+
+    @media (max-width: 600px) {
+      .results-grid { grid-template-columns: 1fr; }
+      .input-group { flex-direction: column; }
+      button { padding: 14px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <div class="search-card">
+      <h1>Link Scanner</h1>
+      <p class="sub">Comprehensive security analysis of any URL</p>
+      <div class="input-group">
+        <input type="text" id="urlInput" placeholder="https://suspicious-site.com" />
+        <button id="scanBtn" onclick="scan()">Analyze Link</button>
+      </div>
+      <div class="loading" id="loading">Consulting security engines...</div>
+    </div>
+
+    <div id="verdictBanner" class="verdict-banner">
+      <div class="verdict-text" id="verdictText">SAFE</div>
+      <div id="finalScoreText" style="font-size: 14px; opacity: 0.8; margin-top: 4px;">Risk Score: 0/100</div>
+    </div>
+
+    <div class="results-grid" id="resultsGrid">
+
+      <!-- Box 1: Heuristics -->
+      <div class="result-box" id="boxHeuristics">
+        <div class="box-header">
+          <span class="box-title">Heuristic Analysis</span>
+          <span class="box-status" id="statusHeuristics">Clean</span>
+        </div>
+        <div class="box-content">
+          <div class="data-row"><span class="data-label">Redirects</span><span class="data-value" id="valRedirects">0</span></div>
+          <div class="data-row" id="finalUrlRow" style="display:none; flex-direction:column; align-items:flex-start; gap:4px;">
+            <span class="data-label">Final Destination</span>
+            <span class="data-value" id="valFinalUrl" style="word-break:break-all; font-size:12px; color:var(--accent);">—</span>
+          </div>
+          <ul class="flags-list" id="listHeuristics"></ul>
+        </div>
+      </div>
+
+      <!-- Box 2: WHOIS -->
+      <div class="result-box" id="boxWhois">
+        <div class="box-header">
+          <span class="box-title">Domain Identity</span>
+          <span class="box-status" id="statusWhois">Trusted</span>
+        </div>
+        <div class="box-content">
+          <div class="data-row"><span class="data-label">IP Address</span><span class="data-value" id="valIP">—</span></div>
+          <div class="data-row"><span class="data-label">Location</span><span class="data-value" id="valLocation">—</span></div>
+          <div class="data-row"><span class="data-label">Registrar</span><span class="data-value" id="valRegistrar">—</span></div>
+          <div class="data-row"><span class="data-label">Age</span><span class="data-value" id="valAge">—</span></div>
+          <div class="data-row"><span class="data-label">Created</span><span class="data-value" id="valCreated">—</span></div>
+          <ul class="flags-list" id="listWhois"></ul>
+        </div>
+      </div>
+
+      <!-- Box 3: Google Safe Browsing -->
+      <div class="result-box" id="boxGoogle">
+        <div class="box-header">
+          <span class="box-title">Google Safe Browsing</span>
+          <span class="box-status" id="statusGoogle">Clean</span>
+        </div>
+        <div class="box-content">
+          <div id="googleDetails" style="font-size: 13px; color: var(--text-dim);">Google has not flagged this URL for malware or phishing.</div>
+          <ul class="flags-list" id="listGoogle"></ul>
+        </div>
+      </div>
+
+      <!-- Box 4: VirusTotal -->
+      <div class="result-box" id="boxVT">
+        <div class="box-header">
+          <span class="box-title">VirusTotal Intelligence</span>
+          <span class="box-status" id="statusVT">Clean</span>
+        </div>
+        <div class="box-content">
+          <div class="data-row"><span class="data-label">Detections</span><span class="data-value" id="valVTStats">0 / 0 engines</span></div>
+          <ul class="flags-list" id="listVT"></ul>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    function getBoxClass(score) {
+      if (score >= 70) return 'bg-malicious';
+      if (score >= 20) return 'bg-suspicious';
+      return 'bg-safe';
+    }
+
+    function getStatusText(score, type) {
+      if (score >= 70) return 'Malicious';
+      if (score >= 20) return 'Suspicious';
+      return type === 'whois' ? 'Trusted' : 'Clean';
+    }
+
+    function getStatusClass(score) {
+      if (score >= 70) return 'status-malicious';
+      if (score >= 20) return 'status-suspicious';
+      return 'status-safe';
+    }
+
+    async function scan() {
+      const url = document.getElementById('urlInput').value.trim();
+      if (!url) return;
+
+      document.getElementById('scanBtn').disabled = true;
+      document.getElementById('loading').style.display = 'block';
+      document.getElementById('resultsGrid').style.display = 'none';
+      document.getElementById('verdictBanner').style.display = 'none';
+      document.body.style.background = '#0f1117'; // Reset bg
+
+      try {
+        const res = await fetch('/api/scan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url })
+        });
+        const data = await res.json();
+
+        // 1. Overall Background & Banner
+        const finalScore = data.score;
+        if (finalScore >= 70) {
+          document.body.style.background = '#2b0d0d';
+          document.getElementById('verdictBanner').className = 'verdict-banner bg-malicious';
+          document.getElementById('verdictText').textContent = 'MALICIOUS';
+        } else if (finalScore >= 35) {
+          document.body.style.background = '#2b1f0d';
+          document.getElementById('verdictBanner').className = 'verdict-banner bg-suspicious';
+          document.getElementById('verdictText').textContent = 'SUSPICIOUS';
+        } else {
+          document.body.style.background = '#0d2b1f';
+          document.getElementById('verdictBanner').className = 'verdict-banner bg-safe';
+          document.getElementById('verdictText').textContent = 'SAFE';
+        }
+        document.getElementById('finalScoreText').textContent = `Combined Risk Score: ${finalScore}/100`;
+        document.getElementById('verdictBanner').style.display = 'block';
+
+        // 2. Individual Boxes
+        const scores = data.individualScores;
+
+        // HEURISTICS
+        const boxH = document.getElementById('boxHeuristics');
+        boxH.className = 'result-box ' + getBoxClass(scores.heuristics);
+        document.getElementById('statusHeuristics').textContent = getStatusText(scores.heuristics, 'heur');
+        document.getElementById('statusHeuristics').className = 'box-status ' + getStatusClass(scores.heuristics);
+        
+        // Redirection Info
+        document.getElementById('valRedirects').textContent = data.redirectCount;
+        if (data.redirectCount > 0) {
+          document.getElementById('finalUrlRow').style.display = 'flex';
+          document.getElementById('valFinalUrl').textContent = data.finalUrl;
+        } else {
+          document.getElementById('finalUrlRow').style.display = 'none';
+        }
+
+        const listH = document.getElementById('listHeuristics');
+        listH.innerHTML = '';
+        data.flags.filter(f => !f.includes('Google') && !f.includes('VirusTotal') && !f.includes('Domain')).forEach(f => {
+          const li = document.createElement('li'); li.textContent = f; listH.appendChild(li);
+        });
+        if (listH.children.length === 0) listH.innerHTML = '<li style="color:#4ade80">No suspicious patterns detected</li>';
+
+        // WHOIS
+        const boxW = document.getElementById('boxWhois');
+        boxW.className = 'result-box ' + getBoxClass(scores.whois);
+        document.getElementById('statusWhois').textContent = getStatusText(scores.whois, 'whois');
+        document.getElementById('statusWhois').className = 'box-status ' + getStatusClass(scores.whois);
+        
+        // IP and Location
+        const loc = data.details.location;
+        document.getElementById('valIP').textContent = loc?.ip || 'Unknown';
+        document.getElementById('valLocation').textContent = loc?.success ? `${loc.city}, ${loc.country}` : 'Unknown';
+        
+        document.getElementById('valRegistrar').textContent = data.details.registrar;
+        document.getElementById('valAge').textContent = data.details.domainAgeDays ? `${data.details.domainAgeDays} days` : 'Unknown';
+        document.getElementById('valCreated').textContent = data.details.domainCreatedOn ? new Date(data.details.domainCreatedOn).toLocaleDateString() : 'Unknown';
+        const listW = document.getElementById('listWhois');
+        listW.innerHTML = '';
+        data.flags.filter(f => f.includes('Domain')).forEach(f => {
+          const li = document.createElement('li'); li.textContent = f; listW.appendChild(li);
+        });
+
+        // GOOGLE
+        const boxG = document.getElementById('boxGoogle');
+        boxG.className = 'result-box ' + getBoxClass(scores.safeBrowsing);
+        document.getElementById('statusGoogle').textContent = getStatusText(scores.safeBrowsing, 'google');
+        document.getElementById('statusGoogle').className = 'box-status ' + getStatusClass(scores.safeBrowsing);
+        const gDetails = document.getElementById('googleDetails');
+        if (data.details.googleThreats.length > 0) {
+          gDetails.textContent = 'Google flagged this URL for:';
+          const listG = document.getElementById('listGoogle');
+          listG.innerHTML = '';
+          data.details.googleThreats.forEach(t => {
+            const li = document.createElement('li'); li.textContent = t.replace(/_/g, ' '); listG.appendChild(li);
+          });
+        } else {
+          gDetails.textContent = 'Google has not flagged this URL.';
+          document.getElementById('listGoogle').innerHTML = '';
+        }
+
+        // VIRUSTOTAL
+        const boxVT = document.getElementById('boxVT');
+        boxVT.className = 'result-box ' + getBoxClass(scores.virusTotal);
+        document.getElementById('statusVT').textContent = getStatusText(scores.virusTotal, 'vt');
+        document.getElementById('statusVT').className = 'box-status ' + getStatusClass(scores.virusTotal);
+        document.getElementById('valVTStats').textContent = `${data.details.vtPositives} / ${data.details.vtTotal} engines`;
+        const listV = document.getElementById('listVT');
+        listV.innerHTML = '';
+        if (data.details.vtPositives > 0) {
+          const li = document.createElement('li');
+          li.textContent = `${data.details.vtPositives} security vendors flagged this as malicious`;
+          listV.appendChild(li);
+        }
+
+        document.getElementById('resultsGrid').style.display = 'grid';
+
+      } catch (e) {
+        console.error(e);
+        alert('Scan failed. Make sure server is running.');
+      }
+
+      document.getElementById('scanBtn').disabled = false;
+      document.getElementById('loading').style.display = 'none';
+    }
+
+    document.getElementById('urlInput').addEventListener('keydown', e => { if (e.key === 'Enter') scan(); });
+  </script>
+</body>
+</html>

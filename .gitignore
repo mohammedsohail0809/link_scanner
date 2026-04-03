@@ -1,0 +1,15 @@
+# Node
+node_modules/
+npm-debug.log
+package-lock.json
+
+# Environment
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project-specific
+test_*.js
+debug.log
